@@ -1,0 +1,489 @@
+const SUPABASE_URL = "https://cmphgnoaewugqybzowmh.supabase.co/rest/v1/";
+const SUPABASE_ANON_KEY = "sb_publishable_Gpg1EH59SvIv4VWPERzHyw_Fdzitny3";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>校园快递互助代取平台 Supabase版</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3b82f6',
+            secondary: '#64748b',
+            success: '#10b981',
+            warning: '#f59e0b',
+            danger: '#ef4444',
+            info: '#06b6d4'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .hide-privacy {filter: blur(6px);user-select: none;}
+    .star-gray{color:#d1d5db;}
+    .star-active{color:#f59e0b;}
+    .page{display:none;}
+    .page.active{display:block;}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+<div id="app">
+  <nav class="bg-primary text-white shadow-md sticky top-0 z-50">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <h1 class="text-xl font-bold"><i class="fa fa-paper-plane mr-2"></i>校园快递互助代取平台</h1>
+      <div id="nav-user" class="flex items-center gap-4"></div>
+    </div>
+  </nav>
+  <div class="container mx-auto px-4 py-6">
+    <!-- 登录页 -->
+    <div id="page-login" class="page">
+      <div class="max-w-md mx-auto bg-white p-6 rounded-lg shadow">
+        <h2 class="text-xl font-bold mb-4">邮箱登录 / 注册</h2>
+        <div class="mb-3">
+          <label class="block mb-1">邮箱</label>
+          <input type="email" id="login-email" class="w-full border px-3 py-2 rounded" placeholder="xxx@xxx.com">
+        </div>
+        <div class="mb-4">
+          <label class="block mb-1">密码</label>
+          <input type="password" id="login-pwd" class="w-full border px-3 py-2 rounded" placeholder="密码不少于6位">
+        </div>
+        <div class="flex gap-3">
+          <button onclick="signIn()" class="flex-1 bg-primary text-white py-2 rounded hover:bg-blue-700">登录</button>
+          <button onclick="signUp()" class="flex-1 bg-secondary text-white py-2 rounded hover:bg-slate-600">注册账号</button>
+        </div>
+        <div class="mt-3 text-sm text-slate-500">注册后Supabase会发验证邮件，点链接激活</div>
+      </div>
+    </div>
+    <!-- 首页广场 -->
+    <div id="page-home" class="page">
+      <div class="flex flex-wrap gap-4 mb-6">
+        <button onclick="showPage('publish')" class="bg-primary text-white px-4 py-2 rounded shadow hover:bg-blue-700"><i class="fa fa-plus mr-1"></i>发布代取需求</button>
+        <button onclick="showPage('mine')" class="bg-white border px-4 py-2 rounded shadow hover:bg-slate-100"><i class="fa fa-user mr-1"></i>个人中心&信誉</button>
+        <button onclick="showPage('message')" class="bg-white border px-4 py-2 rounded shadow hover:bg-slate-100"><i class="fa fa-bell mr-1"></i>消息通知 <span id="msg-badge" class="hidden bg-danger text-white text-xs px-1 rounded">0</span></button>
+        <button onclick="showPage('stationManage')" class="bg-white border px-4 py-2 rounded shadow hover:bg-slate-100"><i class="fa fa-tags mr-1"></i>驿站管理</button>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 p-3 rounded mb-6 text-sm text-amber-800">
+        <i class="fa fa-info-circle"></i> 云端版本：数据存在Supabase，换设备不丢失；仅信息对接，线下结算。
+      </div>
+      <div class="bg-white p-4 rounded shadow mb-6">
+        <h3 class="font-bold mb-3">筛选订单</h3>
+        <div class="flex flex-wrap gap-3 items-center">
+          <select id="filter-station" class="border px-2 py-1 rounded"><option value="">全部驿站</option></select>
+          <select id="filter-weight" class="border px-2 py-1 rounded">
+            <option value="">全部重量</option>
+            <option value="<1kg">&lt;1kg</option>
+            <option value="1-3kg">1–3kg</option>
+            <option value="3-5kg">3–5kg</option>
+            <option value=">5kg">&gt;5kg</option>
+          </select>
+          <label class="flex items-center gap-1"><input type="checkbox" id="filter-urgent">只看加急</label>
+          <button onclick="loadOrders()" class="bg-primary text-white px-3 py-1 rounded">筛选</button>
+        </div>
+      </div>
+      <h3 class="font-bold text-lg mb-3">全部待接单需求</h3>
+      <div id="order-list" class="grid md:grid-cols-2 gap-4"></div>
+    </div>
+    <!-- 发布订单 -->
+    <div id="page-publish" class="page">
+      <div class="max-w-lg bg-white p-6 rounded-lg shadow mx-auto">
+        <h2 class="text-xl font-bold mb-4">发布代取需求</h2>
+        <div class="mb-3"><label class="block mb-1">需求标题</label><input type="text" id="title" class="w-full border px-3 py-2 rounded"></div>
+        <div class="mb-3"><label class="block mb-1">选择驿站</label><select id="station" class="w-full border px-3 py-2 rounded"></select></div>
+        <div class="mb-3"><label class="block mb-1">备注说明</label><textarea id="desc" class="w-full border px-3 py-2 rounded" rows="2"></textarea></div>
+        <div class="mb-3"><label class="block mb-1">快递重量</label>
+          <select id="weight" class="w-full border px-3 py-2 rounded">
+            <option value="<1kg">&lt;1kg</option>
+            <option value="1-3kg">1–3kg</option>
+            <option value="3-5kg">3–5kg</option>
+            <option value=">5kg">&gt;5kg</option>
+          </select>
+        </div>
+        <div class="mb-3"><label class="block mb-1">悬赏价格（线下结算）</label><input type="number" id="price" class="w-full border px-3 py-2 rounded" min="0" step="0.5"></div>
+        <div class="mb-3"><label class="block mb-1">快递单号 <span class="text-danger">接单后可见</span></label><input type="text" id="expressNo" class="w-full border px-3 py-2 rounded"></div>
+        <div class="mb-3"><label class="block mb-1">取件码 <span class="text-danger">接单后可见</span></label><input type="text" id="pickCode" class="w-full border px-3 py-2 rounded"></div>
+        <div class="mb-4"><label class="flex items-center gap-2"><input type="checkbox" id="isUrgent">加急需求</label></div>
+        <button onclick="publishOrder()" class="w-full bg-primary text-white py-2 rounded hover:bg-blue-700">提交发布</button>
+      </div>
+    </div>
+    <!-- 驿站管理 -->
+    <div id="page-stationManage" class="page">
+      <div class="max-w-lg bg-white p-6 rounded-lg shadow mx-auto">
+        <h2 class="text-xl font-bold mb-4">驿站标签管理</h2>
+        <div class="flex gap-2 mb-4">
+          <input type="text" id="newStationName" class="flex-1 border px-3 py-2 rounded" placeholder="驿站名称">
+          <button onclick="addStation()" class="bg-success text-white px-3 py-2 rounded">新增</button>
+        </div>
+        <div id="stationListWrap"></div>
+        <div class="mt-4"><button onclick="showPage('home')" class="bg-slate-200 px-3 py-1 rounded">返回广场</button></div>
+      </div>
+    </div>
+    <!-- 个人中心 -->
+    <div id="page-mine" class="page">
+      <h2 class="text-xl font-bold mb-4">个人中心 & 信誉信息</h2>
+      <div class="bg-white p-4 rounded shadow mb-6 max-w-lg">
+        <div class="flex items-center gap-4">
+          <div class="text-4xl text-primary"><i class="fa fa-user-circle"></i></div>
+          <div>
+            <div class="text-lg font-bold" id="mine-email"></div>
+            <div>信誉均分：<span id="mine-score">暂无评价</span></div>
+          </div>
+        </div>
+        <div class="mt-4">
+          <h4 class="font-semibold">收到的评价</h4>
+          <div id="mine-comment-list" class="mt-2 max-h-48 overflow-y-auto text-sm"></div>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-white p-4 rounded shadow"><h3 class="font-bold mb-3">我发布的订单</h3><div id="my-publish-list"></div></div>
+        <div class="bg-white p-4 rounded shadow"><h3 class="font-bold mb-3">我接单的订单</h3><div id="my-take-list"></div></div>
+      </div>
+      <div class="mt-6"><button onclick="signOut()" class="bg-danger text-white px-4 py-2 rounded hover:bg-red-700">退出登录</button></div>
+    </div>
+    <!-- 消息中心 -->
+    <div id="page-message" class="page">
+      <div class="max-w-lg bg-white p-6 rounded-lg shadow mx-auto">
+        <h2 class="text-xl font-bold mb-4">站内消息通知</h2>
+        <div id="msg-list-wrap"></div>
+        <div class="mt-4 flex gap-2">
+          <button onclick="readAllMsg()" class="bg-info text-white px-3 py-1 rounded">全部标为已读</button>
+          <button onclick="showPage('home')" class="bg-slate-200 px-3 py-1 rounded">返回广场</button>
+        </div>
+      </div>
+    </div>
+    <!-- 订单详情 -->
+    <div id="page-detail" class="page">
+      <div class="max-w-lg bg-white p-6 rounded-lg shadow mx-auto">
+        <h2 class="text-xl font-bold mb-4">订单详情</h2>
+        <div id="detail-body"></div>
+        <div class="mt-4 flex gap-2 flex-wrap" id="detail-btn-group"></div>
+      </div>
+    </div>
+    <!-- 评价 -->
+    <div id="page-comment" class="page">
+      <div class="max-w-lg bg-white p-6 rounded-lg shadow mx-auto">
+        <h2 class="text-xl font-bold mb-4">评价接单同学</h2>
+        <div class="mb-3">
+          <label class="block mb-1">态度评分</label>
+          <div class="text-2xl" id="starAttitude">
+            <i class="fa fa-star star-gray cursor-pointer" data-v="1"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="2"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="3"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="4"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="5"></i>
+          </div>
+          <input type="hidden" id="scoreAttitude" value="0">
+        </div>
+        <div class="mb-3">
+          <label class="block mb-1">速度评分</label>
+          <div class="text-2xl" id="starSpeed">
+            <i class="fa fa-star star-gray cursor-pointer" data-v="1"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="2"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="3"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="4"></i>
+            <i class="fa fa-star star-gray cursor-pointer" data-v="5"></i>
+          </div>
+          <input type="hidden" id="scoreSpeed" value="0">
+        </div>
+        <div class="mb-4"><label class="block mb-1">评语</label><textarea id="commentText" class="w-full border px-3 py-2 rounded" rows="3"></textarea></div>
+        <div class="flex gap-2">
+          <button onclick="submitComment()" class="bg-success text-white px-4 py-2 rounded">提交评价</button>
+          <button onclick="showPage('detail')" class="bg-slate-200 px-4 py-2 rounded">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== 在这里替换成你自己Supabase项目信息 ==========
+const SUPABASE_URL = "https://xxx.supabase.co";
+const SUPABASE_ANON_KEY = "你的anon密钥";
+// =====================================================
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let user = null;
+let currentDetailOrderId = null;
+let commentOrderId = null;
+let stationMap = {};
+
+// 页面切换
+function showPage(name){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.getElementById("page-"+name).classList.add("active");
+  if(name==="home") loadStations().then(()=>loadOrders());
+  if(name==="stationManage") loadStations(true);
+  if(name==="mine") loadMine();
+  if(name==="message") loadMessages();
+  if(name==="publish") loadStations();
+  if(name==="comment") resetStar();
+}
+function refreshNav(){
+  const nav = document.getElementById("nav-user");
+  if(user){
+    nav.innerHTML = `<span>欢迎：${user.email}</span>
+    <button onclick="showPage('mine')" class="px-3 py-1 rounded border border-white hover:bg-white hover:text-primary">个人中心</button>
+    <button onclick="signOut()" class="px-3 py-1 rounded border border-white hover:bg-white hover:text-primary">退出</button>`;
+  }else{
+    nav.innerHTML = `<button onclick="showPage('login')" class="px-3 py-1 rounded border border-white hover:bg-white hover:text-primary">登录/注册</button>`;
+  }
+}
+// 登录注册
+async function signUp(){
+  const email = document.getElementById("login-email").value.trim();
+  const pwd = document.getElementById("login-pwd").value.trim();
+  const {error} = await supabase.auth.signUp({email, password:pwd});
+  if(error) alert(error.message);
+  else alert("注册成功！去邮箱收验证邮件激活");
+}
+async function signIn(){
+  const email = document.getElementById("login-email").value.trim();
+  const pwd = document.getElementById("login-pwd").value.trim();
+  const {data,error} = await supabase.auth.signInWithPassword({email,password:pwd});
+  if(error) return alert(error.message);
+  user = data.user;
+  refreshNav();
+  showPage("home");
+  refreshMsgBadge();
+}
+async function signOut(){
+  await supabase.auth.signOut();
+  user = null;
+  refreshNav();
+  showPage("login");
+}
+// 驿站
+async function loadStations(renderManage=false){
+  const {data} = await supabase.from("stations").select("*");
+  stationMap = {};
+  data.forEach(s=>stationMap[s.id]=s.name);
+  if(renderManage){
+    const wrap = document.getElementById("stationListWrap");
+    wrap.innerHTML = data.map(s=>`<div class="flex justify-between items-center border-b py-2"><span>${s.name}</span><button onclick="delStation(${s.id})" class="text-danger">删除</button></div>`).join("");
+  }else{
+    const sel = document.getElementById("station");
+    const filterSel = document.getElementById("filter-station");
+    sel.innerHTML = ""; filterSel.innerHTML = `<option value="">全部驿站</option>`;
+    data.forEach(s=>{sel.innerHTML += `<option value="${s.id}">${s.name}</option>`;filterSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;})
+  }
+}
+async function addStation(){
+  const name = document.getElementById("newStationName").value.trim();
+  if(!name) return alert("名称不能为空");
+  await supabase.from("stations").insert({name});
+  document.getElementById("newStationName").value="";
+  loadStations(true);
+}
+async function delStation(id){
+  await supabase.from("stations").delete().eq("id",id);
+  loadStations(true);
+}
+// 消息
+async function sendMsg(toUid,title,content,orderId=null){
+  await supabase.from("messages").insert({to_user:toUid,title,content,link_order_id:orderId});
+}
+async function loadMessages(){
+  const {data} = await supabase.from("messages").select("*").eq("to_user",user.id).order("create_at",{asc:false});
+  const wrap = document.getElementById("msg-list-wrap");
+  if(!data.length){wrap.innerHTML="<div class='text-slate-400'>暂无消息</div>";return;}
+  wrap.innerHTML = data.map(m=>`
+    <div class="border p-3 rounded mb-3 ${m.is_read?'bg-slate-50':'bg-blue-50'}">
+      <div class="font-semibold">${m.title}</div>
+      <div class="text-sm my-1">${m.content}</div>
+      <div class="text-xs text-slate-400">${new Date(m.create_at).toLocaleString()}</div>
+      <div class="mt-2">
+        ${m.link_order_id?`<button onclick="openDetail(${m.link_order_id});markRead(${m.id})" class="text-primary text-sm">查看订单</button>`:""}
+        <button onclick="markRead(${m.id})" class="text-secondary text-sm ml-2">标已读</button>
+      </div>
+    </div>`).join("");
+  refreshMsgBadge();
+}
+async function markRead(mid){
+  await supabase.from("messages").update({is_read:true}).eq("id",mid);
+  loadMessages();
+}
+async function readAllMsg(){
+  await supabase.from("messages").update({is_read:true}).eq("to_user",user.id);
+  loadMessages();
+}
+async function refreshMsgBadge(){
+  if(!user) return;
+  const {count} = await supabase.from("messages").select("*",{count:'exact',head:true}).eq("to_user",user.id).eq("is_read",false);
+  const badge = document.getElementById("msg-badge");
+  if(count>0){badge.classList.remove("hidden");badge.innerText=count;}else badge.classList.add("hidden");
+}
+// 订单
+async function publishOrder(){
+  const stationId = document.getElementById("station").value;
+  const payload = {
+    title:document.getElementById("title").value.trim(),
+    station_id:stationId,
+    descr:document.getElementById("desc").value.trim(),
+    weight:document.getElementById("weight").value,
+    price:Number(document.getElementById("price").value),
+    express_no:document.getElementById("expressNo").value.trim(),
+    pick_code:document.getElementById("pickCode").value.trim(),
+    is_urgent:document.getElementById("isUrgent").checked,
+    publisher:user.id,
+    status:"wait"
+  };
+  if(!payload.title) return alert("标题不能为空");
+  await supabase.from("orders").insert(payload);
+  alert("发布成功");
+  showPage("home");
+}
+async function loadOrders(){
+  const fStation = document.getElementById("filter-station").value;
+  const fWeight = document.getElementById("filter-weight").value;
+  const fUrgent = document.getElementById("filter-urgent").checked;
+  let q = supabase.from("orders").select("*").eq("status","wait");
+  if(fStation) q = q.eq("station_id",fStation);
+  if(fWeight) q = q.eq("weight",fWeight);
+  if(fUrgent) q = q.eq("is_urgent",true);
+  const {data} = await q.order("create_at",{asc:false});
+  const wrap = document.getElementById("order-list");
+  if(!data.length){wrap.innerHTML="<div class='text-slate-500 col-span-2'>暂无待接单需求</div>";return;}
+  wrap.innerHTML = data.map(o=>`
+    <div class="border rounded p-4 bg-white shadow hover:shadow-md transition">
+      <div class="flex justify-between"><h4 class="font-bold">${o.title}</h4>${o.is_urgent?'<span class="text-danger text-sm">加急</span>':''}</div>
+      <p class="text-sm text-slate-600 my-1">驿站：${stationMap[o.station_id]}｜重量：${o.weight}｜悬赏：¥${o.price}</p>
+      <p class="text-xs text-slate-400">${new Date(o.create_at).toLocaleString()}</p>
+      <div class="mt-3"><button onclick="openDetail(${o.id})" class="text-primary hover:underline">查看详情 & 接单</button></div>
+    </div>`).join("");
+}
+async function openDetail(oid){
+  currentDetailOrderId = oid;
+  const {data:o} = await supabase.from("orders").select("*").eq("id",oid).single();
+  const {data:cmts} = await supabase.from("comments").select("*").eq("order_id",oid);
+  const hasComment = cmts.length>0;
+  const isPub = o.publisher === user.id;
+  const isTake = o.taker === user.id;
+  const canSeePrivacy = isPub || isTake;
+  const privNo = canSeePrivacy ? o.express_no : `<span class="hide-privacy">**** 接单后可见 ****</span>`;
+  const privCode = canSeePrivacy ? o.pick_code : `<span class="hide-privacy">**** 接单后可见 ****</span>`;
+  const statusMap = {wait:"待接单",taken:"已接单",done:"已完成",cancel:"已取消"};
+  let btnHtml = "";
+  if(o.status === "wait"){
+    if(!isPub) btnHtml += `<button onclick="takeOrder(${o.id})" class="bg-success text-white px-3 py-1 rounded">我要接单</button>`;
+    else btnHtml += `<button onclick="cancelOrder(${o.id})" class="bg-danger text-white px-3 py-1 rounded">取消需求</button>`;
+  }
+  if(o.status === "taken"){
+    if(isTake) btnHtml += `<button onclick="untakeOrder(${o.id})" class="bg-warning text-white px-3 py-1 rounded">取消接单</button>`;
+    if(isPub) btnHtml += `<button onclick="confirmDone(${o.id})" class="bg-success text-white px-3 py-1 rounded">确认取件完成</button>`;
+  }
+  if(o.status === "done" && isPub && !hasComment) btnHtml += `<button onclick="goComment(${o.id})" class="bg-info text-white px-3 py-1 rounded">评价接单同学</button>`;
+  document.getElementById("detail-body").innerHTML = `
+    <div class="mb-2"><span class="font-semibold">状态：</span>${statusMap[o.status]}</div>
+    <div class="mb-2"><span class="font-semibold">标题：</span>${o.title}</div>
+    <div class="mb-2"><span class="font-semibold">驿站：</span>${stationMap[o.station_id]}</div>
+    <div class="mb-2"><span class="font-semibold">备注：</span>${o.descr||"无"}</div>
+    <div class="mb-2"><span class="font-semibold">重量：</span>${o.weight}</div>
+    <div class="mb-2"><span class="font-semibold">悬赏价格：</span>¥${o.price}（线下结算）</div>
+    <div class="mb-2"><span class="font-semibold">快递单号：</span>${privNo}</div>
+    <div class="mb-2"><span class="font-semibold">取件码：</span>${privCode}</div>
+    <div class="mb-2 text-xs text-slate-400">发布时间：${new Date(o.create_at).toLocaleString()}</div>
+    ${hasComment?"<div class='text-success mt-2'>✅ 已完成评价</div>":""}`;
+  document.getElementById("detail-btn-group").innerHTML = btnHtml + `<button onclick="showPage('home')" class="bg-slate-200 px-3 py-1 rounded">返回列表</button>`;
+  showPage("detail");
+}
+async function takeOrder(oid){
+  const {data:o} = await supabase.from("orders").select("publisher,title").eq("id",oid).single();
+  if(o.publisher === user.id) return alert("不能接自己的订单");
+  await supabase.from("orders").update({status:"taken",taker:user.id}).eq("id",oid);
+  await sendMsg(o.publisher,"你的订单被接单啦",`订单【${o.title}】有人接单！`,oid);
+  alert("接单成功");
+  openDetail(oid);
+}
+async function untakeOrder(oid){
+  const {data:o} = await supabase.from("orders").select("publisher,title").eq("id",oid).single();
+  await supabase.from("orders").update({status:"wait",taker:null}).eq("id",oid);
+  await sendMsg(o.publisher,"接单者取消接单",`订单【${o.title}】重新开放接单`,oid);
+  alert("已取消接单");
+  openDetail(oid);
+}
+async function cancelOrder(oid){
+  const {data:o} = await supabase.from("orders").select("taker,title").eq("id",oid).single();
+  await supabase.from("orders").update({status:"cancel"}).eq("id",oid);
+  if(o.taker) await sendMsg(o.taker,"订单被发布人取消",`订单【${o.title}】已取消`,oid);
+  alert("订单已取消");
+  showPage("home");
+}
+async function confirmDone(oid){
+  const {data:o} = await supabase.from("orders").select("taker,title").eq("id",oid).single();
+  await supabase.from("orders").update({status:"done"}).eq("id",oid);
+  await sendMsg(o.taker,"订单确认完成",`订单【${o.title}】发布人确认完成，可以评价`,oid);
+  alert("确认完成，可以评价");
+  openDetail(oid);
+}
+// 评价星星
+function bindStarClick(){
+  document.querySelectorAll("#starAttitude i").forEach(s=>s.onclick=()=>{const v=Number(s.dataset.v);document.getElementById("scoreAttitude").value=v;fillStar("starAttitude",v);});
+  document.querySelectorAll("#starSpeed i").forEach(s=>s.onclick=()=>{const v=Number(s.dataset.v);document.getElementById("scoreSpeed").value=v;fillStar("starSpeed",v);});
+}
+function fillStar(id,score){
+  document.querySelectorAll(`#${id} i`).forEach(s=>{const sv=Number(s.dataset.v);if(sv<=score){s.classList.add("star-active");s.classList.remove("star-gray");}else{s.classList.add("star-gray");s.classList.remove("star-active");}})
+}
+function resetStar(){fillStar("starAttitude",0);fillStar("starSpeed",0);document.getElementById("scoreAttitude").value=0;document.getElementById("scoreSpeed").value=0;document.getElementById("commentText").value="";}
+function goComment(oid){commentOrderId=oid;showPage("comment");}
+async function submitComment(){
+  const att = Number(document.getElementById("scoreAttitude").value);
+  const sp = Number(document.getElementById("scoreSpeed").value);
+  const txt = document.getElementById("commentText").value.trim();
+  if(att===0||sp===0) return alert("态度、速度都要打分");
+  const {data:o} = await supabase.from("orders").select("taker,title").eq("id",commentOrderId).single();
+  await supabase.from("comments").insert({order_id:commentOrderId,to_user:o.taker,from_user:user.id,score_attitude:att,score_speed:sp,content:txt});
+  await sendMsg(o.taker,"你收到新评价",`订单【${o.title}】收到评价！`);
+  alert("评价提交成功");
+  currentDetailOrderId = commentOrderId;
+  openDetail(commentOrderId);
+}
+// 个人中心
+async function loadMine(){
+  document.getElementById("mine-email").innerText = user.email;
+  const {data:myCmts} = await supabase.from("comments").select("*,from_user:from_user(email)").eq("to_user",user.id);
+  let avgText = "暂无评价";
+  if(myCmts.length>0){
+    let sum = 0;
+    myCmts.forEach(c=>sum += (c.score_attitude + c.score_speed)/2);
+    avgText = (sum/myCmts.length).toFixed(1);
+  }
+  document.getElementById("mine-score").innerText = avgText;
+  const cmtWrap = document.getElementById("mine-comment-list");
+  if(!myCmts.length) cmtWrap.innerHTML = "<div class='text-slate-400'>暂无评价</div>";
+  else cmtWrap.innerHTML = myCmts.map(c=>`
+    <div class="border-b py-2">
+      <div>来自：${c.from_user?.email}</div>
+      <div>态度${c.score_attitude}星｜速度${c.score_speed}星</div>
+      <div class="text-slate-600">${c.content||"无评语"}</div>
+      <div class="text-xs text-slate-400">${new Date(c.create_at).toLocaleString()}</div>
+    </div>`).join("");
+  const {data:myPub} = await supabase.from("orders").select("id,title,status").eq("publisher",user.id).order("create_at",{asc:false});
+  const {data:myTake} = await supabase.from("orders").select("id,title,status").eq("taker",user.id).order("create_at",{asc:false});
+  const smap = {wait:"待接单",taken:"已接单",done:"已完成",cancel:"已取消"};
+  function renderCard(arr){
+    if(!arr.length) return "<div class='text-slate-400 text-sm'>暂无订单</div>";
+    return arr.map(o=>`<div class="border p-2 rounded mb-2"><div class="font-medium">${o.title}</div><div class="text-xs">状态：${smap[o.status]}</div><button onclick="openDetail(${o.id})" class="text-xs text-primary">查看详情</button></div>`).join("");
+  }
+  document.getElementById("my-publish-list").innerHTML = renderCard(myPub);
+  document.getElementById("my-take-list").innerHTML = renderCard(myTake);
+}
+// 初始化
+async function init(){
+  bindStarClick();
+  const {data} = await supabase.auth.getSession();
+  if(data.session) user = data.session.user;
+  refreshNav();
+  refreshMsgBadge();
+  if(user) showPage("home");
+  else showPage("login");
+}
+init();
+</script>
+</body>
+</html>
